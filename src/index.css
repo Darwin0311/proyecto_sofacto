@@ -7,8 +7,8 @@
 header {
   background-color: rgb(67, 67, 204);
   display: flex;
-  width: 100%;
-  height: 100%;
+  width: auto;
+  height: auto;
   box-sizing: border-box;
 }
 
@@ -19,9 +19,9 @@ ul {
 }
 
 .login {
-  display: ;
+  display: flex;
   align-items: center;
-  right: 300px;
+  left: 600px;
   padding: 0;
   margin: 0;
 }
