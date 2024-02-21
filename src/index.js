@@ -6,8 +6,7 @@ const root = ReactDOM.createRoot(document.getElementById("root"));
 
 root.render(
   <>
-
-  <h2>Hola</h2>
+  
 
   </>
 );
