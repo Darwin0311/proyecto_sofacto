@@ -7,8 +7,12 @@
 header {
   display: flex;
   width: 100%;
-  height: 100%;
   box-sizing: border-box;
+  overflow: hidden;
+  position: fixed;
+  background: #fdfffc;
+  border-bottom: 1.4px solid #03588c;
+  box-shadow: 0px 0px 15px #5c5c5c;
 }
 
 ul {
@@ -21,13 +25,80 @@ ul {
 .login {
   display: flex;
   align-items: center;
-  right: 300px;
-  padding: 0;
-  margin: 0;
+  text-align: center;
+  text-align: left;
+  padding: 10px;
+  margin: 5px;
+  position: fixed;
+  left: 77%;
+  font-size: 20px;
 }
 
 li {
   list-style: none;
   padding: 15px;
   text-align: center;
+}
+
+/* Informacion */
+.cuerp {
+  position: fixed;
+  top: 18%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 200px;
+  max-width: 1350px;
+}
+
+.info {
+  position: fixed;
+  left: 32%;
+  margin: 15px;
+  font-size: 20px;
+}
+
+.logo {
+  position: relative;
+  display: flex;
+  left: 40px;
+  cursor: pointer;
+}
+
+.contp {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  box-shadow: 1px 2px 2px #41658a;
+  background: #79b473;
+  border: 6px solid transparent;
+  border-radius: 18px 0px 19px 0px;
+  position: relative;
+  top: 155px;
+  width: 50%;
+  left: 6%;
+  max-width: 600px;
+  padding: 6px;
+  transition: transform 0.3s ease, background-color 0.3s ease;
+}
+
+.contp:hover {
+  transform: scale(1.1);
+  background-color: #2980b9;
+}
+
+.initl {
+  position: absolute;
+  top: 150px;
+  right: 10%;
+  width: 320px;
+}
+
+.cuerh {
+  font-size: 20px;
+  font-weight: bold;
+}
+.cuerp p {
+  text-align: center;
+  font-size: 15px;
 }
