@@ -3,16 +3,28 @@ import { Button } from "@nextui-org/react";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faEdit, faTrashAlt } from "@fortawesome/free-solid-svg-icons";
+import {
+  faEdit,
+  faTrashAlt,
+  faPlusCircle,
+} from "@fortawesome/free-solid-svg-icons";
+import Swal from "sweetalert2";
 import { Modal, ModalBody, ModalFooter, ModalHeader } from "reactstrap";
+import { Pie } from "react-chartjs-2";
+import { Chart, ArcElement } from "chart.js";
+
+Chart.register(ArcElement);
 
 const url = "http://localhost:3000";
 
 class App extends Component {
   state = {
+    proveedores: [],
+    categoria: [],
     data: [],
     modalInsertar: false,
     modalEliminar: false,
+    modalAgregarCantidad: false,
     form: {
       IdProducto: "",
       Nombre: "",
@@ -22,53 +34,203 @@ class App extends Component {
       Fecha: "",
       Estado: "",
       Precio: "",
-      tipoModal: "",
+      cantidadAgregar: "",
     },
+    productosAgrupados: [],
+    currentPage: 1,
+    productsPerPage: 6,
+    searchTerm: "",
+  };
+
+  GetSelectP = () => {
+    axios
+      .get(`${url}/proveedores/P`)
+      .then((res) => {
+        if (Array.isArray(res.data)) {
+          this.setState({ proveedores: res.data });
+        } else if (res.data && Object.keys(res.data).length === 0) {
+          console.error("La respuesta está vacía.");
+        } else {
+          console.error("La respuesta no es un array:", res.data);
+        }
+      })
+      .catch((err) => {
+        console.log(err);
+      });
+  };
+
+  pGetSelect = () => {
+    axios
+      .get(`${url}/select/S`)
+      .then((res) => {
+        if (Array.isArray(res.data)) {
+          this.setState({ categoria: res.data });
+        } else if (res.data && Object.keys(res.data).length === 0) {
+          console.error("La respuesta está vacía.");
+        } else {
+          console.error("La respuesta no es un array:", res.data);
+        }
+      })
+      .catch((err) => {
+        console.log(err);
+      });
   };
 
   peticionGet = () => {
     axios
-      .get(url)
+      .get(`${url}/`)
       .then((response) => {
-        this.setState({ data: response.data });
+        const productos = response.data;
+
+        const dataActualizada = productos.reduce((acc, producto) => {
+          const { IdProducto, Nombre, Descripcion, ...rest } = producto;
+          const existingProductIndex = acc.findIndex(
+            (item) => item.Nombre === Nombre
+          );
+          if (existingProductIndex !== -1) {
+            acc[existingProductIndex].Descripcion += parseFloat(Descripcion);
+          } else {
+            acc.push({
+              IdProducto,
+              Nombre,
+              Descripcion: parseFloat(Descripcion),
+              ...rest,
+            });
+          }
+          return acc;
+        }, []);
+
+        const productosAgrupados = productos.reduce((acc, producto) => {
+          const { Nombre, Descripcion } = producto;
+          if (acc[Nombre]) {
+            acc[Nombre].Cantidad += parseFloat(Descripcion);
+          } else {
+            acc[Nombre] = { ...producto, Cantidad: parseFloat(Descripcion) };
+          }
+          return acc;
+        }, {});
+
+        // Actualizar el estado de los productos
+        const dataActualizadaConEstado = dataActualizada.map((producto) => ({
+          ...producto,
+          Estado: producto.Descripcion > 0 ? "Disponible" : "Agotado",
+        }));
+
+        this.setState({
+          data: dataActualizadaConEstado,
+          productosAgrupados: Object.values(productosAgrupados),
+        });
       })
       .catch((error) => {
         console.log(error.message);
       });
+  };
+
+  peticionPut = async () => {
+    const { form } = this.state;
+    const currentDate = new Date().toISOString().split("T")[0];
+    try {
+      await axios.put(`${url}/actualizar-producto/${form.IdProducto}`, {
+        ...form,
+        Fecha: currentDate,
+      });
+      this.modalInsertar();
+      this.peticionGet();
+      Swal.fire({
+        title: "Éxito",
+        text: "El producto se ha modificado correctamente.",
+        icon: "success",
+        confirmButtonText: "OK",
+      });
+      if (form.Descripcion <= 10) {
+        alert(
+          `El producto ${form.Nombre} sigue con pocas unidades, haz un nuevo pedido.`
+        );
+      }
+    } catch (error) {
+      console.log(error.message);
+    }
+  };
+
+  agregarCantidad = () => {
+    const { IdProducto, cantidadAgregar } = this.state.form;
+
+    axios
+      .put(`http://localhost:3000/agregar-cantidad/${IdProducto}`, {
+        cantidad: cantidadAgregar,
+      })
+      .then((response) => {
+        this.setState((prevState) => ({
+          modalAgregarCantidad: false,
+          data: prevState.data.map((producto) =>
+            producto.IdProducto === IdProducto
+              ? {
+                  ...producto,
+                  Descripcion:
+                    producto.Descripcion + parseFloat(cantidadAgregar),
+                  Estado:
+                    producto.Descripcion + parseFloat(cantidadAgregar) > 0
+                      ? "Disponible"
+                      : "Agotado",
+                }
+              : producto
+          ),
+        }));
+
+        // Mostrar la alerta de SweetAlert
+        Swal.fire({
+          title: "¡Cantidad agregada!",
+          text: "La cantidad ha sido agregada correctamente.",
+          icon: "success",
+          confirmButtonText: "OK",
+        });
+      })
+      .catch((error) => {
+        console.log(error.message);
+      });
+  };
+
+  peticionDelete = async () => {
+    const { form } = this.state;
+    try {
+      await axios.delete(`${url}/eliminar-producto/${form.IdProducto}`);
+      this.setState((prevState) => ({
+        modalEliminar: false,
+        data: prevState.data.filter(
+          (producto) => producto.IdProducto !== form.IdProducto
+        ),
+      }));
+      Swal.fire({
+        title: "Éxito",
+        text: "El producto se ha eliminado correctamente.",
+        icon: "success",
+        confirmButtonText: "OK",
+      });
+    } catch (error) {
+      console.log(error.message);
+    }
   };
 
   peticionPost = async () => {
     delete this.state.form.IdProducto;
+    const currentDate = new Date().toISOString().split("T")[0];
+    this.setState({
+      form: {
+        ...this.state.form,
+        Fecha: currentDate,
+      },
+    });
     await axios
-      .post("http://localhost:3000/crear", this.state.form)
+      .post(`${url}/crear`, this.state.form)
       .then((response) => {
         this.modalInsertar();
         this.peticionGet();
-      })
-      .catch((error) => {
-        console.log(error.message);
-      });
-  };
-
-  peticionPut = () => {
-    const { IdProducto, ...rest } = this.state.form;
-    axios
-      .put(`http://localhost:3000/actualizar/${IdProducto}`, rest)
-      .then((response) => {
-        this.modalInsertar();
-        this.peticionGet(); // Fetch updated data after the successful update
-      })
-      .catch((error) => {
-        console.log(error.message);
-      });
-  };
-
-  peticionDelete = () => {
-    axios
-      .delete("http://localhost:3000/eliminar/" + this.state.form.IdProducto)
-      .then((response) => {
-        this.setState({ modalEliminar: false });
-        this.peticionGet();
+        Swal.fire({
+          title: "Éxito",
+          text: "El producto se agregó correctamente",
+          icon: "success",
+          confirmButtonText: "OK",
+        });
       })
       .catch((error) => {
         console.log(error.message);
@@ -80,104 +242,242 @@ class App extends Component {
   };
 
   seleccionarProducto = (Productos) => {
+    const { Id_categoria, Fecha, ...rest } = Productos;
+
+    // Formatear la fecha
+    const formattedFecha = new Date(Fecha).toISOString().split("T")[0];
+
     this.setState({
-      tipoModal: "actualizar",
       form: {
-        ...Productos, // Copy all fields from Productos
-        Fecha: Productos.Fecha.substring(0, 10), // Ensure Date format is YYYY-MM-DD
+        ...rest,
+        Nombre_categoria_FK: Id_categoria,
+        Fecha: formattedFecha,
       },
     });
   };
 
-  handleChange = async (e) => {
-    e.persist();
-    await this.setState({
+  handleChange = (e) => {
+    const { name, value } = e.target;
+    let estado = this.state.form.Estado;
+
+    if (name === "Descripcion") {
+      const cantidad = parseInt(value);
+      estado = cantidad > 0 ? "Disponible" : "Agotado";
+    }
+
+    this.setState({
       form: {
         ...this.state.form,
-        [e.target.name]: e.target.value,
+        [name]: value,
+        Estado: estado,
       },
     });
-    console.log(this.state.form);
+  };
+
+  handleSearch = (event) => {
+    this.setState({ searchTerm: event.target.value });
   };
 
   componentDidMount() {
+    this.GetSelectP();
+    this.pGetSelect();
     this.peticionGet();
     this.setState({
       form: {
         ...this.state.form,
-        tipoModal: "insertar", // Ensure tipoModal is set correctly
+        tipoModal: "insertar",
       },
     });
   }
 
   render() {
-    const { form } = this.state;
+    const { form, currentPage, productsPerPage, searchTerm } = this.state;
+    const filteredData = this.state.data.filter((product) =>
+      product.Nombre.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const indexOfLastProduct = currentPage * productsPerPage;
+    const indexOfFirstProduct = indexOfLastProduct - productsPerPage;
+    const currentProducts = filteredData.slice(
+      indexOfFirstProduct,
+      indexOfLastProduct
+    );
+
+    const paginate = (pageNumber) => this.setState({ currentPage: pageNumber });
+
+    const pageNumbers = [];
+    for (
+      let i = 1;
+      i <= Math.ceil(filteredData.length / productsPerPage);
+      i++
+    ) {
+      pageNumbers.push(i);
+    }
+
+    const renderPageNumbers = pageNumbers.map((number) => (
+      <li
+        key={number}
+        className={`page-item ${currentPage === number ? "active" : ""}`}
+      >
+        <a onClick={() => paginate(number)} href="#" className="page-link">
+          {number}
+        </a>
+      </li>
+    ));
+
+    // Obtener los datos para la gráfica circular
+    const productCounts = this.state.productosAgrupados.map(
+      (producto) => producto.Cantidad
+    );
+    const productNames = this.state.productosAgrupados.map(
+      (producto) => producto.Nombre
+    );
+
+    // Configurar los datos de la gráfica circular
+    const pieData = {
+      labels: productNames,
+      datasets: [
+        {
+          data: productCounts,
+          backgroundColor: [
+            "#FF6384",
+            "#36A2EB",
+            "#FFCE56",
+            "#4BC0C0",
+            "#9966FF",
+            "#FF9F40",
+          ],
+        },
+      ],
+    };
+
     return (
       <div className="App">
         <br />
-        <Button
-          className="btn btn-success"
-          onClick={() => {
-            this.setState({ form: {}, tipoModal: "insertar" });
-            this.modalInsertar();
-          }}
-        >
-          Agregar Producto
-        </Button>
-        <br />
-        <br />
-        <table className="table ">
+        <div className="table-container">
+          <Button
+            className="btn btn-success"
+            onClick={() => {
+              this.setState({ form: {} });
+              this.modalInsertar();
+            }}
+          >
+            Agregar Producto
+          </Button>
+          <input
+            className="buscar-cont"
+            type="text"
+            placeholder="Buscar por nombre del producto"
+            value={searchTerm}
+            onChange={this.handleSearch}
+          />
+          <br />
+          <br />
+          <table className="table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>PRODUCTO</th>
+                <th>CATEGORIA</th>
+                <th>PROVEEDOR</th>
+                <th>CANTIDAD</th>
+                <th>FECHA INGRESO</th>
+                <th>ESTADO</th>
+                <th>PRECIO</th>
+                <th>ACCIONES</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentProducts.map((Productos) => {
+                // Formatear la fecha
+                const formattedFecha = new Date(Productos.Fecha)
+                  .toISOString()
+                  .split("T")[0];
+
+                return (
+                  <tr key={Productos.IdProducto}>
+                    <td>{Productos.IdProducto}</td>
+                    <td>{Productos.Nombre}</td>
+                    <td>{Productos.Nombre_categoria}</td>
+                    <td>{Productos.Proveedor}</td>
+                    <td>{Productos.Descripcion}</td>
+                    <td>{formattedFecha}</td>{" "}
+                    {/* Aquí se muestra la fecha formateada */}
+                    <td>{Productos.Estado}</td>
+                    <td>
+                      {new Intl.NumberFormat("en-EN").format(Productos.Precio)}
+                    </td>
+                    <td>
+                      <Button
+                        className="btn btn-primary"
+                        onClick={() => {
+                          this.seleccionarProducto(Productos);
+                          this.modalInsertar();
+                        }}
+                      >
+                        <FontAwesomeIcon icon={faEdit} />
+                      </Button>
+                      {"   "}
+                      <Button
+                        className="btn btn-success"
+                        onClick={() => {
+                          this.seleccionarProducto(Productos);
+                          this.setState({ modalAgregarCantidad: true });
+                        }}
+                      >
+                        <FontAwesomeIcon icon={faPlusCircle} />
+                      </Button>
+                      {"   "}
+                      <Button
+                        className="btn btn-danger"
+                        onClick={() => {
+                          this.seleccionarProducto(Productos);
+                          this.setState({ modalEliminar: true });
+                        }}
+                      >
+                        <FontAwesomeIcon icon={faTrashAlt} />
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {currentProducts.map((Productos) => {
+            if (Productos.Descripcion <= 10) {
+              return (
+                <div key={Productos.IdProducto} className="alert alert-warning">
+                  <p>
+                    El producto "{Productos.Nombre}" le quedan pocas unidades,
+                    haz un nuevo pedido.
+                  </p>
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+        <nav aria-label="Page navigation example">
+          <ul className="pagination justify-content-center">
+            {renderPageNumbers}
+          </ul>
+        </nav>
+
+        {/* Tabla con la gráfica circular */}
+        <table className="table">
           <thead>
             <tr>
-              <th>ID</th>
-              <th>PRODUCTO</th>
-              <th>CATEGORIA</th>
-              <th>PROVEEDOR</th>
-              <th>DESCRIPCION</th>
-              <th>FECHA INGRESO</th>
-              <th>ESTADO</th>
-              <th>PRECIO</th>
-              <th>ACCIONES</th>
+              <th>Porcentaje de Productos Agregados</th>
             </tr>
           </thead>
           <tbody>
-            {this.state.data.map((Productos) => {
-              return (
-                <tr key={Productos.IdProducto}>
-                  <td>{Productos.IdProducto}</td>
-                  <td>{Productos.Nombre}</td>
-                  <td>{Productos.Nombre_categoria_FK}</td>
-                  <td>{Productos.Proveedor}</td>
-                  <td>{Productos.Descripcion}</td>
-                  <td>{Productos.Fecha}</td>
-                  <td>{Productos.Estado}</td>
-                  <td>
-                    {new Intl.NumberFormat("en-EN").format(Productos.Precio)}
-                  </td>
-                  <td>
-                    <Button
-                      className="btn btn-primary"
-                      onClick={() => {
-                        this.seleccionarProducto(Productos);
-                        this.modalInsertar();
-                      }}
-                    >
-                      <FontAwesomeIcon icon={faEdit} />
-                    </Button>
-                    {"   "}
-                    <Button
-                      className="btn btn-danger"
-                      onClick={() => {
-                        this.seleccionarProducto(Productos);
-                        this.setState({ modalEliminar: true });
-                      }}
-                    >
-                      <FontAwesomeIcon icon={faTrashAlt} />
-                    </Button>
-                  </td>
-                </tr>
-              );
-            })}
+            <tr>
+              <td>
+                <div style={{ width: "400px", margin: "0 auto" }}>
+                  <Pie data={pieData} />
+                </div>
+              </td>
+            </tr>
           </tbody>
         </table>
 
@@ -192,17 +492,6 @@ class App extends Component {
           </ModalHeader>
           <ModalBody>
             <div className="form-group">
-              <label htmlFor="IdProducto">ID</label>
-              <input
-                className="form-control"
-                type="text"
-                name="IdProducto"
-                id="IdProducto"
-                readOnly
-                onChange={this.handleChange}
-                value={form.IdProducto || this.state.data.length + 1}
-              />
-              <br />
               <label htmlFor="Nombre">PRODUCTO</label>
               <input
                 className="form-control"
@@ -213,55 +502,71 @@ class App extends Component {
                 value={form.Nombre || ""}
               />
               <br />
-              <label htmlFor="Nombre_categoria_FK">CATEGORIA</label>
-              <input
-                className="form-control"
-                type="text"
+              <select
+                onChange={this.handleChange}
                 name="Nombre_categoria_FK"
                 id="Nombre_categoria_FK"
-                onChange={this.handleChange}
+                className="form-control"
                 value={form.Nombre_categoria_FK || ""}
-              />
+              >
+                <option value="">SELECCIONE UNA CATEGORIA</option>
+                {this.state.categoria.map((categoria) => (
+                  <option
+                    key={categoria.Id_categoria}
+                    value={categoria.Id_categoria}
+                  >
+                    {categoria.Nombre_categoria}
+                  </option>
+                ))}
+              </select>
               <br />
               <label htmlFor="Proveedor">PROVEEDOR</label>
-              <input
+              <select
                 className="form-control"
-                type="text"
                 name="Proveedor"
                 id="Proveedor"
                 onChange={this.handleChange}
                 value={form.Proveedor || ""}
-              />
+              >
+                <option value="">SELECCIONE UN PROVEEDOR</option>
+                {this.state.proveedores.map((proveedor) => (
+                  <option key={proveedor.IdProveedor} value={proveedor.Empresa}>
+                    {proveedor.Empresa}
+                  </option>
+                ))}
+              </select>
               <br />
-              <label htmlFor="Descripcion">DESCRIPCION</label>
+              <label htmlFor="Descripcion">CANTIDAD</label>
               <input
                 className="form-control"
-                type="text"
+                type="number"
                 name="Descripcion"
                 id="Descripcion"
                 onChange={this.handleChange}
                 value={form.Descripcion || ""}
               />
               <br />
-              <label htmlFor="Fecha">FECHA</label>
-              <input
-                className="form-control"
-                type="date"
-                name="Fecha"
-                id="Fecha"
-                onChange={this.handleChange}
-                value={form.Fecha || ""}
-              />
-              <br />
-              <label htmlFor="Estado">ESTADO</label>
+              <label htmlFor="Fecha">FECHA INGRESO</label>
               <input
                 className="form-control"
                 type="text"
+                name="Fecha"
+                id="Fecha"
+                value={form.Fecha || ""}
+                readOnly
+              />
+              <br />
+              <label htmlFor="Estado">ESTADO</label>
+              <select
+                className="form-control"
                 name="Estado"
                 id="Estado"
                 onChange={this.handleChange}
                 value={form.Estado || ""}
-              />
+                disabled
+              >
+                <option value="">{form.Estado}</option>
+              </select>
               <br />
               <label htmlFor="Precio">PRECIO</label>
               <input
@@ -275,19 +580,19 @@ class App extends Component {
             </div>
           </ModalBody>
           <ModalFooter>
-            {this.state.tipoModal === "insertar" ? (
-              <Button
-                className="btn btn-success"
-                onClick={() => this.peticionPost()}
-              >
-                Insertar
-              </Button>
-            ) : (
+            {form.IdProducto ? (
               <Button
                 className="btn btn-primary"
                 onClick={() => this.peticionPut()}
               >
                 Actualizar
+              </Button>
+            ) : (
+              <Button
+                className="btn btn-success"
+                onClick={() => this.peticionPost()}
+              >
+                Insertar
               </Button>
             )}
             <Button
@@ -298,10 +603,9 @@ class App extends Component {
             </Button>
           </ModalFooter>
         </Modal>
-
         <Modal isOpen={this.state.modalEliminar}>
           <ModalBody>
-            Estás seguro que deseas eliminar a la empresa {form && form.Nombre}
+            Estás seguro que deseas eliminar el producto {form && form.Nombre}
           </ModalBody>
           <ModalFooter>
             <Button
@@ -315,6 +619,36 @@ class App extends Component {
               onClick={() => this.setState({ modalEliminar: false })}
             >
               No
+            </Button>
+          </ModalFooter>
+        </Modal>
+
+        <Modal isOpen={this.state.modalAgregarCantidad}>
+          <ModalBody>
+            <div className="form-group">
+              <label htmlFor="cantidadAgregar">Cantidad a agregar:</label>
+              <input
+                className="form-control"
+                type="number"
+                name="cantidadAgregar"
+                id="cantidadAgregar"
+                onChange={this.handleChange}
+                value={form.cantidadAgregar || ""}
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              className="btn btn-success"
+              onClick={() => this.agregarCantidad()}
+            >
+              Agregar
+            </Button>
+            <Button
+              className="btn btn-secondary"
+              onClick={() => this.setState({ modalAgregarCantidad: false })}
+            >
+              Cancelar
             </Button>
           </ModalFooter>
         </Modal>

@@ -4,12 +4,12 @@ import Avat from "../../components/Avatar";
 import App from "../../components/TablaProductos/TabVenta";
 import { Link } from "react-router-dom";
 
-export const Informe_venta = () => {
+const Informe_venta = () => {
   return (
     <>
       <div className="nav">
         <img src={logoempresa} alt="Logo" className="navlg" />
-        <Link to="#">
+        <Link to="/factura">
           <Button className="BtnN" color="success" variant="shadow">
             Factura
           </Button>
@@ -19,14 +19,9 @@ export const Informe_venta = () => {
             Inventario
           </Button>
         </Link>
-        <Link to="7venta">
+        <Link to="/venta">
           <Button className="BtnN" color="success" variant="shadow">
             Registro Ventas
-          </Button>
-        </Link>
-        <Link to="/">
-          <Button className="BtnN" color="success" variant="shadow">
-            Informe Ventas
           </Button>
         </Link>
         <div className="Avat">
@@ -43,3 +38,5 @@ export const Informe_venta = () => {
     </>
   );
 };
+
+export default Informe_venta;
